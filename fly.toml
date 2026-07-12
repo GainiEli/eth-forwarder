@@ -1,0 +1,12 @@
+[app]
+name = "eth-trx-forwarder"
+
+[build]
+  [build.args]
+
+[env]
+
+[[services]]
+
+[processes]
+  worker = "python3 run.py"
