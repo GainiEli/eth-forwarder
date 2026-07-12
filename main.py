@@ -45,4 +45,4 @@ while True:
     except Exception as e:
         print(f"Error: {e}")
     
-    time.sleep(1)  # Check every 1 second
+    time.sleep(0.5)  # Check every 0.5 seconds
