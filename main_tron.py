@@ -16,7 +16,7 @@ last_balance = 0
 
 while True:
     try:
-        current_balance = client.get_account_balance(SOURCE_ADDRESS)
+        current_balance = float(client.get_account_balance(SOURCE_ADDRESS))
 
         if last_balance == 0:
             last_balance = current_balance
