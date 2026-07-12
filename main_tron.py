@@ -47,4 +47,4 @@ while True:
     except Exception as e:
         print(f"[TRX Error] {e}")
 
-    time.sleep(1)  # Check every 1 second
+    time.sleep(3)  # Check every 3 seconds (avoid TronGrid rate limit)
