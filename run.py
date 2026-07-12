@@ -2,26 +2,27 @@ import subprocess
 import threading
 import time
 
-def run_eth():
+def run_script(name, script):
     while True:
-        print("[ETH] Starting...")
-        proc = subprocess.run(["python3", "main.py"])
-        print(f"[ETH] Exited (code {proc.returncode}), restarting in 5s...")
-        time.sleep(5)
-
-def run_tron():
-    while True:
-        print("[TRX] Starting...")
-        proc = subprocess.run(["python3", "main_tron.py"])
-        print(f"[TRX] Exited (code {proc.returncode}), restarting in 5s...")
+        print(f"[{name}] Starting...")
+        proc = subprocess.run(["python3", script])
+        print(f"[{name}] Exited (code {proc.returncode}), restarting in 5s...")
         time.sleep(5)
 
 if __name__ == "__main__":
-    eth_thread = threading.Thread(target=run_eth, daemon=True)
-    tron_thread = threading.Thread(target=run_tron, daemon=True)
+    scripts = [
+        ("ETH",      "main.py"),
+        ("Optimism", "main_optimism.py"),
+        ("BNB",      "main_bnb.py"),
+        ("TRX",      "main_tron.py"),
+        ("Solana",   "main_solana.py"),
+    ]
 
-    eth_thread.start()
-    tron_thread.start()
+    threads = [threading.Thread(target=run_script, args=(name, script), daemon=True)
+               for name, script in scripts]
 
-    eth_thread.join()
-    tron_thread.join()
+    for t in threads:
+        t.start()
+
+    for t in threads:
+        t.join()
