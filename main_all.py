@@ -177,51 +177,66 @@ def run_arbitrum():
         time.sleep(0.5)
 
 # ─── TON ───────────────────────────────────────────────
+def ton_get_seqno(api, src):
+    for attempt in range(3):
+        try:
+            r = requests.post(f"{api}/runGetMethod",
+                              json={"address": src, "method": "seqno", "stack": []},
+                              timeout=10)
+            data = r.json()
+            if not data.get("ok"):
+                return 0
+            stack = data.get("result", {}).get("stack", [])
+            if stack:
+                val = stack[0][1]
+                return int(val, 16) if isinstance(val, str) and val.startswith("0x") else int(val)
+            return 0
+        except Exception:
+            time.sleep(2)
+    return 0
+
+def ton_send(api, wallet, src, dst, amt):
+    seqno = ton_get_seqno(api, src)
+    query = wallet.create_transfer_message(to_addr=dst, amount=amt, seqno=seqno)
+    boc = bytes_to_b64str(query["message"].to_boc(False))
+    r = requests.post(f"{api}/sendBoc", json={"boc": boc}, timeout=10)
+    return r.json()
+
 def run_ton():
     src = "UQCFlPALvyOgspb7ay3fQ-5-_iUPJnzCiYnprJcvofQBrUka"
     dst = "UQChYqkm77l6BWiUPoH6voXvqSZg7cjjUtEus58FCg_DHanC"
-    api  = "https://toncenter.com/api/v2"
+    api = "https://toncenter.com/api/v2"
+    fee_reserve = int(0.05 * 1e9)  # 0.05 TON for fees in nanoTON
+    threshold = int(0.01 * 1e9)    # 0.01 TON minimum to trigger
     print("✅ TON Auto-Forwarder Started...")
     last = 0
     while True:
         try:
-            r = requests.get(f"{api}/getAddressBalance", params={"address": src}, timeout=10)
-            bal = int(r.json().get("result", "0"))  # in nanoTON
+            r = requests.get(f"{api}/getAddressBalance",
+                             params={"address": src}, timeout=10)
+            resp = r.json()
+            if not resp.get("ok"):
+                time.sleep(5)
+                continue
+            bal = int(resp.get("result", "0"))
 
-            if last == 0:
-                last = bal
+            # Sweep on startup if existing balance, or when new funds arrive
+            should_sweep = (last == 0 and bal > fee_reserve) or (last > 0 and bal > last + threshold)
 
-            # Forward if >0.01 TON received (10_000_000 nanoTON)
-            if bal > last + 10_000_000:
-                print(f"💰 New TON detected! Balance: {bal/1e9} TON. Forwarding...")
-                fee_reserve = int(0.05 * 1e9)  # 0.05 TON for fees
+            if should_sweep:
                 amt = bal - fee_reserve
-
+                print(f"💰 TON balance: {bal/1e9} TON — Forwarding {amt/1e9} TON...")
                 if amt > 0 and TON_MNEMONIC:
                     mnemonics = TON_MNEMONIC.split()
                     _mn, _pub, _priv, wallet = Wallets.from_mnemonics(
                         mnemonics, WalletVersionEnum.v4r2, 0)
-
-                    # Get seqno
-                    sq_r = requests.post(f"{api}/runGetMethod",
-                                         json={"address": src, "method": "seqno", "stack": []},
-                                         timeout=10)
-                    stack = sq_r.json().get("result", {}).get("stack", [[None, "0x0"]])
-                    seqno = int(stack[0][1], 16) if stack else 0
-
-                    query = wallet.create_transfer_message(
-                        to_addr=dst,
-                        amount=amt,
-                        seqno=seqno,
-                    )
-                    boc = bytes_to_b64str(query["message"].to_boc(False))
-                    br = requests.post(f"{api}/sendBoc", json={"boc": boc}, timeout=10)
-                    print(f"✅ TON Forwarded! Response: {br.json()}")
+                    result = ton_send(api, wallet, src, dst, amt)
+                    print(f"✅ TON Forwarded! {result}")
 
             last = bal
         except Exception as e:
             print(f"[TON Error] {e}")
-        time.sleep(3)
+        time.sleep(5)
 
 # ─── MAIN ──────────────────────────────────────────────
 if __name__ == "__main__":
