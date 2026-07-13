@@ -90,7 +90,8 @@ def run_bnb():
 
 # ─── TRX ───────────────────────────────────────────────
 def run_tron():
-    client = Tron()
+    from tronpy.providers import HTTPProvider
+    client = Tron(HTTPProvider("https://tron-rpc.publicnode.com"))
     src = "TLTwz7xyLbZvacqUSccqAQ9PG7VAmSHC9c"
     dst = "TDf3hyhF2173YPTB4E5NAcAS5gzuJeMaav"
     print("✅ TRX Auto-Forwarder Started...")
