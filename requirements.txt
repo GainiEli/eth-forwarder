@@ -3,3 +3,5 @@ tronpy==0.6.2
 solana==0.40.0
 solders==0.27.1
 base58==2.1.1
+tonsdk==1.0.15
+requests==2.31.0
