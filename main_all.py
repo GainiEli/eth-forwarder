@@ -12,9 +12,14 @@ import asyncio
 import time
 import os
 
-PRIVATE_KEY      = os.environ.get('PRIVATE_KEY', '')
-TRON_PRIVATE_KEY = os.environ.get('TRON_PRIVATE_KEY', '')
+import requests
+from tonsdk.contract.wallet import WalletVersionEnum, Wallets
+from tonsdk.utils import to_nano, bytes_to_b64str
+
+PRIVATE_KEY        = os.environ.get('PRIVATE_KEY', '')
+TRON_PRIVATE_KEY   = os.environ.get('TRON_PRIVATE_KEY', '')
 SOLANA_PRIVATE_KEY = os.environ.get('SOLANA_PRIVATE_KEY', '')
+TON_MNEMONIC       = os.environ.get('TON_MNEMONIC', '')
 
 # ─── ETH ───────────────────────────────────────────────
 def run_eth():
@@ -147,6 +152,77 @@ async def run_solana_async():
 def run_solana():
     asyncio.run(run_solana_async())
 
+# ─── ARBITRUM ──────────────────────────────────────────
+def run_arbitrum():
+    w3 = Web3(Web3.HTTPProvider("https://arbitrum.publicnode.com"))
+    src = "0xDBD3c0751A74ffA2D83D75e587Ce5f9b8b5dc5B9"
+    dst = "0x4F64b4b4bC117b4485393e4dE14F658B2C6396b5"
+    print("✅ Arbitrum Auto-Forwarder Started...")
+    last = w3.eth.get_balance(src)
+    while True:
+        try:
+            bal = w3.eth.get_balance(src)
+            if bal > last + 500000000000000:
+                gp, gl = w3.eth.gas_price, 21000
+                amt = bal - (gl * gp * 3)
+                if amt > 0:
+                    tx = {'nonce': w3.eth.get_transaction_count(src), 'to': dst,
+                          'value': amt, 'gas': gl, 'gasPrice': gp, 'chainId': 42161}
+                    signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+                    txh = w3.eth.send_raw_transaction(signed.raw_transaction)
+                    print(f"✅ Arbitrum Forwarded! Tx: {txh.hex()}")
+            last = bal
+        except Exception as e:
+            print(f"[ARB Error] {e}")
+        time.sleep(0.5)
+
+# ─── TON ───────────────────────────────────────────────
+def run_ton():
+    src = "UQCFlPALvyOgspb7ay3fQ-5-_iUPJnzCiYnprJcvofQBrUka"
+    dst = "UQChYqkm77l6BWiUPoH6voXvqSZg7cjjUtEus58FCg_DHanC"
+    api  = "https://toncenter.com/api/v2"
+    print("✅ TON Auto-Forwarder Started...")
+    last = 0
+    while True:
+        try:
+            r = requests.get(f"{api}/getAddressBalance", params={"address": src}, timeout=10)
+            bal = int(r.json().get("result", "0"))  # in nanoTON
+
+            if last == 0:
+                last = bal
+
+            # Forward if >0.01 TON received (10_000_000 nanoTON)
+            if bal > last + 10_000_000:
+                print(f"💰 New TON detected! Balance: {bal/1e9} TON. Forwarding...")
+                fee_reserve = int(0.05 * 1e9)  # 0.05 TON for fees
+                amt = bal - fee_reserve
+
+                if amt > 0 and TON_MNEMONIC:
+                    mnemonics = TON_MNEMONIC.split()
+                    _mn, _pub, _priv, wallet = Wallets.from_mnemonics(
+                        mnemonics, WalletVersionEnum.v4r2, 0)
+
+                    # Get seqno
+                    sq_r = requests.post(f"{api}/runGetMethod",
+                                         json={"address": src, "method": "seqno", "stack": []},
+                                         timeout=10)
+                    stack = sq_r.json().get("result", {}).get("stack", [[None, "0x0"]])
+                    seqno = int(stack[0][1], 16) if stack else 0
+
+                    query = wallet.create_transfer_message(
+                        to_addr=dst,
+                        amount=amt,
+                        seqno=seqno,
+                    )
+                    boc = bytes_to_b64str(query["message"].to_boc(False))
+                    br = requests.post(f"{api}/sendBoc", json={"boc": boc}, timeout=10)
+                    print(f"✅ TON Forwarded! Response: {br.json()}")
+
+            last = bal
+        except Exception as e:
+            print(f"[TON Error] {e}")
+        time.sleep(3)
+
 # ─── MAIN ──────────────────────────────────────────────
 if __name__ == "__main__":
     threads = [
@@ -155,9 +231,11 @@ if __name__ == "__main__":
         threading.Thread(target=run_bnb,      name="BNB",      daemon=True),
         threading.Thread(target=run_tron,     name="TRX",      daemon=True),
         threading.Thread(target=run_solana,   name="Solana",   daemon=True),
+        threading.Thread(target=run_arbitrum, name="Arbitrum", daemon=True),
+        threading.Thread(target=run_ton,      name="TON",      daemon=True),
     ]
     for t in threads:
         t.start()
-    print("🚀 All 5 forwarders running...")
+    print("🚀 All 7 forwarders running...")
     for t in threads:
         t.join()
