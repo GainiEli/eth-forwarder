@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY main_all.py .
 
-CMD ["python3", "run.py"]
+CMD ["python3", "main_all.py"]
